@@ -944,13 +944,16 @@ int sr130pc10_sensor_ext_config(void __user *argp)
             printk("[SR130PC10] exposureTime=%d\n", exposureTime);
             break;
          case EXT_CFG_SET_BRIGHTNESS:
-         //  printk(KERN_ERR "[CAMDRV/SR130PC10] EXT_CFG_SET_BRIGHTNESS *** ( %d)\n",cfg_data.value_1);
+         //  printk(KERN_ERR "[CAMDRV/SR130PC10] EXT_CFG_SET_BRIGHTNESS *** ( %d) brightness =%d preview_enable = %d \n",cfg_data.value_1, ,brightness,preview_enable);
 			if((brightness == 0) && (preview_enable == 0)){ 
 				//Brightness control should be applied only once before preview is enabled
             	ext_config_return = sr130pc10_set_exposure_value(cfg_data.value_1);
          		brightness = 1;
 			}
-			if((brightness) && (preview_enable))
+			//P110909-1364 : running camera, control  Brightness, take a shot and then check image in quick view, return to preview 
+			//error : there’s difference on brightness before Quick view and after
+			//This created a side effect so chaged the condition to  ||  
+			if((brightness) || (preview_enable))
 				//This enables when the used tries to change the exposure from UI
             	ext_config_return = sr130pc10_set_exposure_value(cfg_data.value_1);
 

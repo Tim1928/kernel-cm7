@@ -95,7 +95,8 @@ static int b_VGA_mirror=0;
 static int mPreviewRegistersSet = 0;    // Flag to avoid setting preview registers again and again. Set this to 1 first time when preview is started. 
 static unsigned int g_FpsMode=0;
 static unsigned int g_bfps_set=0;
-
+extern int b_esd_detected; //ESD
+static int esd_enabled=0;
 
 static inline int lp8720_i2c_write(unsigned char addr, unsigned char data)
 {
@@ -789,6 +790,7 @@ void sr030pc30_set_power(int onoff)
     
     if(onoff)
     {
+    	b_esd_detected=false; //ESD
         printk(KERN_ERR "[CAMDRV/SR030PC300] %s: POWER ON.\n", __func__);
         mclk_cfg = GPIO_CFG(15, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
         
@@ -1215,6 +1217,13 @@ static int sr030pc30_init_client(struct i2c_client *client)
     return 0;
 }
 
+int sr030pc30_sensor_esd_detected() //ESD
+{
+    printk("[sr030pc30] ESD Detected!!\n");
+    b_esd_detected=true;
+    return 0;
+}
+
 int sr030pc30_sensor_ext_config(void __user *argp)
 {
     sensor_ext_cfg_data        cfg_data;
@@ -1223,11 +1232,13 @@ int sr030pc30_sensor_ext_config(void __user *argp)
     int exposureTime = 0;
 
 
-    if(copy_from_user((void *)&cfg_data, (const void *)argp, sizeof(cfg_data))) {
+    if (copy_from_user((void *)&cfg_data, (const void *)argp, sizeof(cfg_data)))
+    {
         printk(KERN_ERR "[CAMDRV/SR030PC300] %s fail copy_from_user!\n", __func__);
     }
     
-    switch(cfg_data.cmd) {
+    switch (cfg_data.cmd)
+    {
         case EXT_CFG_SET_BRIGHTNESS:
             printk(KERN_ERR "[CAMDRV/SR030PC300] EXT_CFG_SET_BRIGHTNESS (%d %d)\n",cfg_data.cmd,cfg_data.value_1);
             rc = sr030pc30_set_ev(cfg_data.value_1);
@@ -1235,9 +1246,12 @@ int sr030pc30_sensor_ext_config(void __user *argp)
         case EXT_CFG_SET_DTP:
             printk(KERN_ERR "[CAMDRV/SR030PC300] EXT_CFG_SET_DTP (%d %d)\n",cfg_data.cmd,cfg_data.value_1);
             rc = sr030pc30_set_dtp(cfg_data.value_1);
-            if(cfg_data.value_1 == 0) {
+        if (cfg_data.value_1 == 0)
+        {
                 cfg_data.value_2 = 2;
-            } else if(cfg_data.value_1 == 1) {
+        }
+        else if (cfg_data.value_1 == 1)
+        {
                 cfg_data.value_2 = 3;
             }        
             break;
@@ -1270,7 +1284,7 @@ int sr030pc30_sensor_ext_config(void __user *argp)
 		    {
 		        SR030PC30_WRITE_LIST(sr030pc30_flip_none);
 		    }
-		msleep(300);
+			
 	        break;        
         case EXT_CFG_GET_EXIF_INFO:
         {
@@ -1295,11 +1309,44 @@ int sr030pc30_sensor_ext_config(void __user *argp)
           printk("[SR130PC10] exposureTime=%d\n", exposureTime);
         }         
             break;        
+
+
+        case EXT_CFG_TEST_ESD: //TELECA_ESD 
+          printk("[SR030PC300] Reset the Sensor for the ESD case from HAL\n");
+          
+          if(cfg_data.value_1 == 1)
+          {
+            printk(KERN_ERR "[SR030PC300]: ESD Value %d\n",b_esd_detected);
+            cfg_data.value_2 = b_esd_detected;
+            b_esd_detected=false;
+          }
+          else
+          {
+            if(esd_enabled)
+              printk("[SR030PC300] esd_enabled\n");
+              return;
+              
+            esd_enabled=1;
+            mPreviewRegistersSet = 0;
+            prev_vtcall_mode=-1;
+            printk(KERN_ERR "[SR030PC300]:EXT_CFG_TEST_ESD Sensor Reset\n");
+            sr030pc30_set_power(0);
+            msleep(5);
+
+//            msm_camio_camif_pad_reg_reset();
+                
+            sr030pc30_set_power(1);			
+            msleep(5);
+            sr030pc30_set_preview();		
+          
+          }
+        break;
         default:
             break;
     }
 
-    if(copy_to_user((void *)argp, (const void *)&cfg_data, sizeof(cfg_data))) {
+    if (copy_to_user((void *)argp, (const void *)&cfg_data, sizeof(cfg_data)))
+    {
         printk(" %s : copy_to_user Failed \n", __func__);
     }
     
@@ -1342,6 +1389,7 @@ static int sr030pc30_sensor_release(void)
     int rc = 0;
     printk(KERN_ERR "[CAMDRV/SR030PC300] %s E\n",__FUNCTION__);
     mPreviewRegistersSet = 0;   // Exiting sensor driver. Hence set this flag back to 0.
+    esd_enabled=0;
 
     sr030pc30_set_power(0);
     kfree(sr030pc30_ctrl);

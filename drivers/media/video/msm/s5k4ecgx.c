@@ -1982,15 +1982,19 @@ int s5k4ecgx_sensor_ext_config(void __user *arg)
                 printk(KERN_ERR "[S5K4ECGX]:EXT_CFG_TEST_ESD Sensor Reset\n");
 
                 s5k4ecgx_set_power(false);
-                mdelay(100);          
+                mdelay(500);
+                msm_camio_clk_rate_set(24000000);
+                mdelay(5);
+                msm_camio_camif_pad_reg_reset();
+                mdelay(5);
                 s5k4ecgx_set_power(true);    
                 s5k4ecgx_status.camera_initailized = false;
                 s5k4ecgx_status.camera_on = false;
                 s5k4ecgx_probe_init_sensor();    
                 HD_mode=0;
-				msleep(100);
                 s5k4ecgx_set_preview();
-
+                msleep(500);
+                msm_camio_camif_pad_reg_reset_2();
             }
        break;
         default :
